@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cobalt Chloride Equilibrium Simulation</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background-color: #111827;
+            color: white;
+            overflow: hidden;
+        }
+        
+        button {
+            cursor: pointer;
+            border: none;
+            font-family: inherit;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #4b5563;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #3b82f6;
+            cursor: pointer;
+        }
+        
+        input[type="range"]::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #3b82f6;
+            cursor: pointer;
+            border: none;
+        }
+        
+        input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+        }
+        
+        #root {
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        .icon {
+            width: 20px;
+            height: 20px;
+            stroke: currentColor;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            fill: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // Icon components
+        const Play = () => (
+            <svg className="icon" viewBox="0 0 24 24">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+        );
+
+        const Pause = () => (
+            <svg className="icon" viewBox="0 0 24 24">
+                <rect x="6" y="4" width="4" height="16"></rect>
+                <rect x="14" y="4" width="4" height="16"></rect>
+            </svg>
+        );
+
+        const RotateCcw = () => (
+            <svg className="icon" viewBox="0 0 24 24">
+                <polyline points="1 4 1 10 7 10"></polyline>
+                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+            </svg>
+        );
+
+        const Settings = () => (
+            <svg className="icon" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M12 1v6m0 6v6m9-9h-6m-6 0H3"></path>
+            </svg>
+        );
+
+        const Info = () => (
+            <svg className="icon" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+        );
+
+        const HelpCircle = () => (
+            <svg className="icon" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+            </svg>
+        );
+
+        const CobaltEquilibrium = () => {
+            const canvasRef = useRef(null);
+            const animationRef = useRef(null);
+            const particlesRef = useRef([]);
+            
+            const [isRunning, setIsRunning] = useState(true);
+            const [chlorideConcentration, setChlorideConcentration] = useState(50);
+            const [temperature, setTemperature] = useState(50);
+            const [speed, setSpeed] = useState(50);
+            
+            const [showSettings, setShowSettings] = useState(false);
+            const [showInfo, setShowInfo] = useState(false);
+            const [showParticleCounts, setShowParticleCounts] = useState(false);
+            const [showEquation, setShowEquation] = useState(false);
+            const [showMechanism, setShowMechanism] = useState(false);
+            
+            const [stats, setStats] = useState({
+                pinkComplexes: 0,
+                blueComplexes: 0,
+                chlorideIons: 0,
+                waterMolecules: 0,
+                overallColor: '#ff69b4'
+            });
+
+            const CANVAS_WIDTH = 800;
+            const CANVAS_HEIGHT = 600;
+            const PARTICLE_RADIUS = 4;
+            const COMPLEX_RADIUS = 8;
+
+            const PARTICLE_TYPES = {
+                PINK_COMPLEX: 'pink_complex',
+                BLUE_COMPLEX: 'blue_complex',
+                CHLORIDE: 'chloride',
+                WATER: 'water'
+            };
+
+            const initializeParticles = () => {
+                const particles = [];
+                
+                const numComplexes = 40;
+                for (let i = 0; i < numComplexes; i++) {
+                    particles.push({
+                        id: `complex_${i}`,
+                        type: Math.random() < 0.7 ? PARTICLE_TYPES.PINK_COMPLEX : PARTICLE_TYPES.BLUE_COMPLEX,
+                        x: Math.random() * CANVAS_WIDTH,
+                        y: Math.random() * CANVAS_HEIGHT,
+                        vx: (Math.random() - 0.5) * 2,
+                        vy: (Math.random() - 0.5) * 2,
+                        radius: COMPLEX_RADIUS,
+                        reactionCooldown: 0
+                    });
+                }
+                
+                const updateChlorideCount = (concentration) => {
+                    const targetChloride = Math.floor((concentration / 100) * 120);
+                    const currentChloride = particles.filter(p => p.type === PARTICLE_TYPES.CHLORIDE).length;
+                    
+                    if (targetChloride > currentChloride) {
+                        for (let i = currentChloride; i < targetChloride; i++) {
+                            particles.push({
+                                id: `cl_${i}`,
+                                type: PARTICLE_TYPES.CHLORIDE,
+                                x: Math.random() * CANVAS_WIDTH,
+                                y: Math.random() * CANVAS_HEIGHT,
+                                vx: (Math.random() - 0.5) * 3,
+                                vy: (Math.random() - 0.5) * 3,
+                                radius: PARTICLE_RADIUS
+                            });
+                        }
+                    } else if (targetChloride < currentChloride) {
+                        const chlorideParticles = particles.filter(p => p.type === PARTICLE_TYPES.CHLORIDE);
+                        const toRemove = currentChloride - targetChloride;
+                        for (let i = 0; i < toRemove; i++) {
+                            const idx = particles.indexOf(chlorideParticles[i]);
+                            if (idx > -1) particles.splice(idx, 1);
+                        }
+                    }
+                };
+                
+                updateChlorideCount(chlorideConcentration);
+                
+                for (let i = 0; i < 80; i++) {
+                    particles.push({
+                        id: `water_${i}`,
+                        type: PARTICLE_TYPES.WATER,
+                        x: Math.random() * CANVAS_WIDTH,
+                        y: Math.random() * CANVAS_HEIGHT,
+                        vx: (Math.random() - 0.5) * 3,
+                        vy: (Math.random() - 0.5) * 3,
+                        radius: PARTICLE_RADIUS
+                    });
+                }
+                
+                particlesRef.current = particles;
+            };
+
+            const calculateOverallColor = (pinkCount, blueCount) => {
+                const total = pinkCount + blueCount;
+                if (total === 0) return '#ff69b4';
+                
+                const blueRatio = blueCount / total;
+                const pinkRatio = pinkCount / total;
+                
+                const r = Math.round(255 * pinkRatio + 65 * blueRatio);
+                const g = 105;
+                const b = Math.round(180 * pinkRatio + 225 * blueRatio);
+                
+                return `rgb(${r}, ${g}, ${b})`;
+            };
+
+            const checkReactions = (particles, tempFactor, speedFactor) => {
+                for (let i = 0; i < particles.length; i++) {
+                    const p1 = particles[i];
+                    
+                    if (p1.reactionCooldown > 0) {
+                        p1.reactionCooldown--;
+                        continue;
+                    }
+                    
+                    // Forward reaction: Pink + Cl- -> Blue + H2O
+                    // Co(H2O)6(2+) + 4Cl- -> CoCl4(2-) + 6H2O
+                    if (p1.type === PARTICLE_TYPES.PINK_COMPLEX) {
+                        for (let j = 0; j < particles.length; j++) {
+                            const p2 = particles[j];
+                            if (p2.type === PARTICLE_TYPES.CHLORIDE) {
+                                const dx = p1.x - p2.x;
+                                const dy = p1.y - p2.y;
+                                const dist = Math.sqrt(dx * dx + dy * dy);
+                                
+                                if (dist < (p1.radius + p2.radius + 5)) {
+                                    const reactionProb = 0.02 * tempFactor * speedFactor;
+                                    if (Math.random() < reactionProb) {
+                                        // Convert pink to blue
+                                        p1.type = PARTICLE_TYPES.BLUE_COMPLEX;
+                                        p1.reactionCooldown = 30;
+                                        
+                                        // Remove chloride that reacted
+                                        particles.splice(j, 1);
+                                        
+                                        // Add water molecules (simplified: add 1 water per reaction event)
+                                        particles.push({
+                                            id: `water_${Date.now()}`,
+                                            type: PARTICLE_TYPES.WATER,
+                                            x: p1.x + (Math.random() - 0.5) * 30,
+                                            y: p1.y + (Math.random() - 0.5) * 30,
+                                            vx: (Math.random() - 0.5) * 4,
+                                            vy: (Math.random() - 0.5) * 4,
+                                            radius: PARTICLE_RADIUS
+                                        });
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Reverse reaction: Blue + H2O -> Pink + Cl-
+                    // CoCl4(2-) + 6H2O -> Co(H2O)6(2+) + 4Cl-
+                    if (p1.type === PARTICLE_TYPES.BLUE_COMPLEX) {
+                        for (let j = 0; j < particles.length; j++) {
+                            const p2 = particles[j];
+                            if (p2.type === PARTICLE_TYPES.WATER) {
+                                const dx = p1.x - p2.x;
+                                const dy = p1.y - p2.y;
+                                const dist = Math.sqrt(dx * dx + dy * dy);
+                                
+                                if (dist < (p1.radius + p2.radius + 5)) {
+                                    const reactionProb = 0.008 * tempFactor * speedFactor;
+                                    if (Math.random() < reactionProb) {
+                                        // Convert blue to pink
+                                        p1.type = PARTICLE_TYPES.PINK_COMPLEX;
+                                        p1.reactionCooldown = 30;
+                                        
+                                        // Remove water that reacted
+                                        particles.splice(j, 1);
+                                        
+                                        // Add chloride ion
+                                        particles.push({
+                                            id: `cl_${Date.now()}`,
+                                            type: PARTICLE_TYPES.CHLORIDE,
+                                            x: p1.x + (Math.random() - 0.5) * 30,
+                                            y: p1.y + (Math.random() - 0.5) * 30,
+                                            vx: (Math.random() - 0.5) * 4,
+                                            vy: (Math.random() - 0.5) * 4,
+                                            radius: PARTICLE_RADIUS
+                                        });
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            const animate = () => {
+                const canvas = canvasRef.current;
+                if (!canvas) return;
+                
+                const ctx = canvas.getContext('2d');
+                const particles = particlesRef.current;
+                
+                ctx.fillStyle = '#1a1a2e';
+                ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+                
+                const speedFactor = speed / 50;
+                const tempFactor = temperature / 50;
+                
+                particles.forEach(p => {
+                    p.x += p.vx * speedFactor;
+                    p.y += p.vy * speedFactor;
+                    
+                    if (p.x < p.radius || p.x > CANVAS_WIDTH - p.radius) {
+                        p.vx *= -1;
+                        p.x = Math.max(p.radius, Math.min(CANVAS_WIDTH - p.radius, p.x));
+                    }
+                    if (p.y < p.radius || p.y > CANVAS_HEIGHT - p.radius) {
+                        p.vy *= -1;
+                        p.y = Math.max(p.radius, Math.min(CANVAS_HEIGHT - p.radius, p.y));
+                    }
+                });
+                
+                if (isRunning) {
+                    checkReactions(particles, tempFactor, speedFactor);
+                }
+                
+                let pinkCount = 0;
+                let blueCount = 0;
+                let chlorideCount = 0;
+                let waterCount = 0;
+                
+                particles.forEach(p => {
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                    
+                    switch(p.type) {
+                        case PARTICLE_TYPES.PINK_COMPLEX:
+                            ctx.fillStyle = '#ff69b4';
+                            pinkCount++;
+                            break;
+                        case PARTICLE_TYPES.BLUE_COMPLEX:
+                            ctx.fillStyle = '#4169e1';
+                            blueCount++;
+                            break;
+                        case PARTICLE_TYPES.CHLORIDE:
+                            ctx.fillStyle = '#90ee90';
+                            chlorideCount++;
+                            break;
+                        case PARTICLE_TYPES.WATER:
+                            ctx.fillStyle = '#87ceeb';
+                            waterCount++;
+                            break;
+                    }
+                    
+                    ctx.fill();
+                    
+                    if (p.type === PARTICLE_TYPES.PINK_COMPLEX || p.type === PARTICLE_TYPES.BLUE_COMPLEX) {
+                        ctx.strokeStyle = ctx.fillStyle;
+                        ctx.lineWidth = 2;
+                        ctx.globalAlpha = 0.3;
+                        ctx.stroke();
+                        ctx.globalAlpha = 1;
+                    }
+                });
+                
+                setStats({
+                    pinkComplexes: pinkCount,
+                    blueComplexes: blueCount,
+                    chlorideIons: chlorideCount,
+                    waterMolecules: waterCount,
+                    overallColor: calculateOverallColor(pinkCount, blueCount)
+                });
+                
+                animationRef.current = requestAnimationFrame(animate);
+            };
+
+            useEffect(() => {
+                initializeParticles();
+                animate();
+                
+                return () => {
+                    if (animationRef.current) {
+                        cancelAnimationFrame(animationRef.current);
+                    }
+                };
+            }, []);
+
+            useEffect(() => {
+                const particles = particlesRef.current;
+                const targetChloride = Math.floor((chlorideConcentration / 100) * 120);
+                const currentChloride = particles.filter(p => p.type === PARTICLE_TYPES.CHLORIDE).length;
+                
+                if (targetChloride > currentChloride) {
+                    for (let i = currentChloride; i < targetChloride; i++) {
+                        particles.push({
+                            id: `cl_${Date.now()}_${i}`,
+                            type: PARTICLE_TYPES.CHLORIDE,
+                            x: Math.random() * CANVAS_WIDTH,
+                            y: Math.random() * CANVAS_HEIGHT,
+                            vx: (Math.random() - 0.5) * 3,
+                            vy: (Math.random() - 0.5) * 3,
+                            radius: PARTICLE_RADIUS
+                        });
+                    }
+                } else if (targetChloride < currentChloride) {
+                    const chlorideParticles = particles.filter(p => p.type === PARTICLE_TYPES.CHLORIDE);
+                    const toRemove = currentChloride - targetChloride;
+                    for (let i = 0; i < toRemove; i++) {
+                        const idx = particles.indexOf(chlorideParticles[i]);
+                        if (idx > -1) particles.splice(idx, 1);
+                    }
+                }
+            }, [chlorideConcentration]);
+
+            const handleReset = () => {
+                if (animationRef.current) {
+                    cancelAnimationFrame(animationRef.current);
+                }
+                initializeParticles();
+                animate();
+            };
+
+            return (
+                <div style={{ width: '100vw', height: '100vh', backgroundColor: '#111827', color: 'white', display: 'flex', flexDirection: 'column' }}>
+                    {/* Header */}
+                    <div style={{ backgroundColor: '#1f2937', padding: '16px', borderBottom: '1px solid #374151' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <h1 style={{ fontSize: '24px', fontWeight: 'bold' }}>Cobalt Chloride Equilibrium</h1>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                <button
+                                    onClick={() => setShowInfo(!showInfo)}
+                                    style={{ padding: '8px', backgroundColor: '#2563eb', borderRadius: '6px', transition: 'background-color 0.2s' }}
+                                    onMouseOver={(e) => e.target.style.backgroundColor = '#1d4ed8'}
+                                    onMouseOut={(e) => e.target.style.backgroundColor = '#2563eb'}
+                                    title="Information"
+                                >
+                                    <Info />
+                                </button>
+                                <button
+                                    onClick={() => setShowSettings(!showSettings)}
+                                    style={{ padding: '8px', backgroundColor: '#374151', borderRadius: '6px', transition: 'background-color 0.2s' }}
+                                    onMouseOver={(e) => e.target.style.backgroundColor = '#4b5563'}
+                                    onMouseOut={(e) => e.target.style.backgroundColor = '#374151'}
+                                    title="Settings"
+                                >
+                                    <Settings />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Main content */}
+                    <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+                        {/* Simulation area */}
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+                            <div style={{ position: 'relative' }}>
+                                <canvas
+                                    ref={canvasRef}
+                                    width={CANVAS_WIDTH}
+                                    height={CANVAS_HEIGHT}
+                                    style={{ border: '2px solid #374151', borderRadius: '8px' }}
+                                />
+                                
+                                {/* Solution color indicator */}
+                                <div style={{ position: 'absolute', top: '16px', right: '16px', backgroundColor: 'rgba(31, 41, 55, 0.9)', padding: '12px', borderRadius: '8px' }}>
+                                    <div style={{ fontSize: '14px', marginBottom: '8px' }}>Solution Color</div>
+                                    <div 
+                                        style={{ 
+                                            width: '80px', 
+                                            height: '80px', 
+                                            borderRadius: '4px', 
+                                            border: '2px solid white',
+                                            backgroundColor: stats.overallColor 
+                                        }}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Controls */}
+                            <div style={{ marginTop: '16px', width: '100%', maxWidth: '1000px' }}>
+                                <div style={{ backgroundColor: '#1f2937', padding: '16px', borderRadius: '8px' }}>
+                                    {/* Playback controls */}
+                                    <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginBottom: '16px' }}>
+                                        <button
+                                            onClick={() => setIsRunning(!isRunning)}
+                                            style={{ padding: '8px 16px', backgroundColor: '#2563eb', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '8px', transition: 'background-color 0.2s' }}
+                                            onMouseOver={(e) => e.target.style.backgroundColor = '#1d4ed8'}
+                                            onMouseOut={(e) => e.target.style.backgroundColor = '#2563eb'}
+                                        >
+                                            {isRunning ? <Pause /> : <Play />}
+                                            <span>{isRunning ? 'Pause' : 'Play'}</span>
+                                        </button>
+                                        <button
+                                            onClick={handleReset}
+                                            style={{ padding: '8px 16px', backgroundColor: '#374151', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '8px', transition: 'background-color 0.2s' }}
+                                            onMouseOver={(e) => e.target.style.backgroundColor = '#4b5563'}
+                                            onMouseOut={(e) => e.target.style.backgroundColor = '#374151'}
+                                        >
+                                            <RotateCcw />
+                                            <span>Reset</span>
+                                        </button>
+                                    </div>
+
+                                    {/* Chloride slider */}
+                                    <div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                            <label style={{ fontWeight: '600' }}>Chloride Concentration</label>
+                                            <span style={{ fontSize: '14px', color: '#9ca3af' }}>{chlorideConcentration}%</span>
+                                        </div>
+                                        <input
+                                            type="range"
+                                            min="0"
+                                            max="100"
+                                            value={chlorideConcentration}
+                                            onChange={(e) => setChlorideConcentration(Number(e.target.value))}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Settings Panel */}
+                        {showSettings && (
+                            <div style={{ width: '320px', backgroundColor: '#1f2937', borderLeft: '1px solid #374151', padding: '16px', overflowY: 'auto' }}>
+                                <h2 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '16px' }}>Settings</h2>
+                                
+                                {/* Temperature */}
+                                <div style={{ marginBottom: '24px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                        <label style={{ fontWeight: '600' }}>Temperature</label>
+                                        <span style={{ fontSize: '14px', color: '#9ca3af' }}>{temperature}%</span>
+                                    </div>
+                                    <input
+                                        type="range"
+                                        min="0"
+                                        max="100"
+                                        value={temperature}
+                                        onChange={(e) => setTemperature(Number(e.target.value))}
+                                    />
+                                    <p style={{ fontSize: '12px', color: '#9ca3af', marginTop: '4px' }}>
+                                        Higher temperature increases reaction rates
+                                    </p>
+                                </div>
+
+                                {/* Speed */}
+                                <div style={{ marginBottom: '24px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                        <label style={{ fontWeight: '600' }}>Animation Speed</label>
+                                        <span style={{ fontSize: '14px', color: '#9ca3af' }}>{speed}%</span>
+                                    </div>
+                                    <input
+                                        type="range"
+                                        min="10"
+                                        max="100"
+                                        value={speed}
+                                        onChange={(e) => setSpeed(Number(e.target.value))}
+                                    />
+                                </div>
+
+                                {/* Display options */}
+                                <div style={{ borderTop: '1px solid #374151', paddingTop: '16px' }}>
+                                    <h3 style={{ fontWeight: '600', marginBottom: '12px' }}>Display Options</h3>
+                                    
+                                    <label style={{ display: 'flex', alignItems: 'center', marginBottom: '8px', cursor: 'pointer' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={showParticleCounts}
+                                            onChange={(e) => setShowParticleCounts(e.target.checked)}
+                                            style={{ marginRight: '8px' }}
+                                        />
+                                        <span>Show Particle Counts</span>
+                                    </label>
+
+                                    <label style={{ display: 'flex', alignItems: 'center', marginBottom: '8px', cursor: 'pointer' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={showEquation}
+                                            onChange={(e) => setShowEquation(e.target.checked)}
+                                            style={{ marginRight: '8px' }}
+                                        />
+                                        <span>Show Chemical Equation</span>
+                                    </label>
+
+                                    <label style={{ display: 'flex', alignItems: 'center', marginBottom: '8px', cursor: 'pointer' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={showMechanism}
+                                            onChange={(e) => setShowMechanism(e.target.checked)}
+                                            style={{ marginRight: '8px' }}
+                                        />
+                                        <span>Show Reaction Mechanism</span>
+                                    </label>
+                                </div>
+
+                                {/* Particle counts */}
+                                {showParticleCounts && (
+                                    <div style={{ borderTop: '1px solid #374151', paddingTop: '16px', marginTop: '16px' }}>
+                                        <h3 style={{ fontWeight: '600', marginBottom: '12px' }}>Particle Counts</h3>
+                                        <div style={{ fontSize: '14px' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                                <span style={{ display: 'flex', alignItems: 'center' }}>
+                                                    <span style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#ff69b4', marginRight: '8px', display: 'inline-block' }}></span>
+                                                    Pink Complex
+                                                </span>
+                                                <span style={{ fontFamily: 'monospace' }}>{stats.pinkComplexes}</span>
+                                            </div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                                <span style={{ display: 'flex', alignItems: 'center' }}>
+                                                    <span style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#4169e1', marginRight: '8px', display: 'inline-block' }}></span>
+                                                    Blue Complex
+                                                </span>
+                                                <span style={{ fontFamily: 'monospace' }}>{stats.blueComplexes}</span>
+                                            </div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                                <span style={{ display: 'flex', alignItems: 'center' }}>
+                                                    <span style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#90ee90', marginRight: '8px', display: 'inline-block' }}></span>
+                                                    Chloride Ions
+                                                </span>
+                                                <span style={{ fontFamily: 'monospace' }}>{stats.chlorideIons}</span>
+                                            </div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                <span style={{ display: 'flex', alignItems: 'center' }}>
+                                                    <span style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#87ceeb', marginRight: '8px', display: 'inline-block' }}></span>
+                                                    Water Molecules
+                                                </span>
+                                                <span style={{ fontFamily: 'monospace' }}>{stats.waterMolecules}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Chemical equation */}
+                                {showEquation && (
+                                    <div style={{ borderTop: '1px solid #374151', paddingTop: '16px', marginTop: '16px' }}>
+                                        <h3 style={{ fontWeight: '600', marginBottom: '12px' }}>Equilibrium Equation</h3>
+                                        <div style={{ backgroundColor: '#111827', padding: '12px', borderRadius: '6px', fontSize: '14px', fontFamily: 'monospace' }}>
+                                            <div style={{ color: '#ff69b4' }}>Co(H₂O)₆²⁺</div>
+                                            <div style={{ textAlign: 'center', margin: '4px 0' }}>+</div>
+                                            <div style={{ color: '#90ee90' }}>4Cl⁻</div>
+                                            <div style={{ textAlign: 'center', margin: '8px 0' }}>⇌</div>
+                                            <div style={{ color: '#4169e1' }}>CoCl₄²⁻</div>
+                                            <div style={{ textAlign: 'center', margin: '4px 0' }}>+</div>
+                                            <div style={{ color: '#87ceeb' }}>6H₂O</div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Mechanism */}
+                                {showMechanism && (
+                                    <div style={{ borderTop: '1px solid #374151', paddingTop: '16px', marginTop: '16px' }}>
+                                        <h3 style={{ fontWeight: '600', marginBottom: '12px' }}>Reaction Mechanism</h3>
+                                        <div style={{ fontSize: '14px', color: '#d1d5db' }}>
+                                            <p style={{ marginBottom: '8px' }}>
+                                                <strong>Forward:</strong> Chloride ions collide with pink hexaaqua complexes, 
+                                                displacing water molecules to form blue tetrachloro complexes.
+                                            </p>
+                                            <p style={{ marginBottom: '8px' }}>
+                                                <strong>Reverse:</strong> Water molecules collide with blue tetrachloro complexes, 
+                                                displacing chloride ions to reform pink hexaaqua complexes.
+                                            </p>
+                                            <p style={{ color: '#fbbf24' }}>
+                                                Both reactions occur simultaneously. Changing chloride concentration 
+                                                shifts the equilibrium by affecting collision frequency.
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Info Panel */}
+                        {showInfo && (
+                            <div style={{ width: '384px', backgroundColor: '#1f2937', borderLeft: '1px solid #374151', padding: '16px', overflowY: 'auto' }}>
+                                <h2 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '16px' }}>About This Simulation</h2>
+                                
+                                <div style={{ fontSize: '14px', color: '#d1d5db' }}>
+                                    <section style={{ marginBottom: '16px' }}>
+                                        <h3 style={{ fontWeight: '600', color: 'white', marginBottom: '8px' }}>What You're Seeing</h3>
+                                        <p style={{ marginBottom: '8px' }}>
+                                            This simulation shows the dynamic equilibrium between two cobalt complexes:
+                                        </p>
+                                        <ul style={{ listStyleType: 'disc', marginLeft: '20px' }}>
+                                            <li style={{ marginBottom: '4px' }}><span style={{ color: '#ff69b4', fontWeight: '600' }}>Pink particles</span>: Co(H₂O)₆²⁺ (hexaaquacobalt)</li>
+                                            <li style={{ marginBottom: '4px' }}><span style={{ color: '#4169e1', fontWeight: '600' }}>Blue particles</span>: CoCl₄²⁻ (tetrachlorocobalt)</li>
+                                            <li style={{ marginBottom: '4px' }}><span style={{ color: '#90ee90', fontWeight: '600' }}>Green particles</span>: Cl⁻ ions</li>
+                                            <li style={{ marginBottom: '4px' }}><span style={{ color: '#87ceeb', fontWeight: '600' }}>Light blue particles</span>: H₂O molecules</li>
+                                        </ul>
+                                    </section>
+
+                                    <section style={{ marginBottom: '16px' }}>
+                                        <h3 style={{ fontWeight: '600', color: 'white', marginBottom: '8px' }}>Key Concepts</h3>
+                                        <p style={{ marginBottom: '8px' }}>
+                                            <strong>Dynamic Equilibrium:</strong> Both forward and reverse reactions 
+                                            happen continuously. Watch carefully and you'll see pink complexes turning 
+                                            blue while blue complexes simultaneously turn pink.
+                                        </p>
+                                        <p>
+                                            <strong>Le Chatelier's Principle:</strong> When you increase chloride 
+                                            concentration, more collisions occur between Cl⁻ and pink complexes, 
+                                            shifting equilibrium toward the blue form.
+                                        </p>
+                                    </section>
+
+                                    <section style={{ marginBottom: '16px' }}>
+                                        <h3 style={{ fontWeight: '600', color: 'white', marginBottom: '8px' }}>Try This</h3>
+                                        <ol style={{ listStyleType: 'decimal', marginLeft: '20px' }}>
+                                            <li style={{ marginBottom: '8px' }}>Watch the simulation at default settings. Notice both reactions occurring.</li>
+                                            <li style={{ marginBottom: '8px' }}>Increase chloride concentration. Watch the solution shift toward blue.</li>
+                                            <li style={{ marginBottom: '8px' }}>Decrease chloride concentration. The equilibrium shifts back toward pink.</li>
+                                            <li style={{ marginBottom: '8px' }}>Adjust temperature to see how it affects reaction rates.</li>
+                                        </ol>
+                                    </section>
+
+                                    <section style={{ marginBottom: '16px' }}>
+                                        <h3 style={{ fontWeight: '600', color: 'white', marginBottom: '8px' }}>Real-World Connection</h3>
+                                        <p>
+                                            This is the same reaction you see in the laboratory demo where adding 
+                                            concentrated HCl to a pink cobalt solution turns it blue, and diluting 
+                                            with water turns it back to pink.
+                                        </p>
+                                    </section>
+
+                                    <section style={{ backgroundColor: 'rgba(30, 58, 138, 0.3)', padding: '12px', borderRadius: '6px' }}>
+                                        <h3 style={{ fontWeight: '600', color: 'white', marginBottom: '8px', display: 'flex', alignItems: 'center' }}>
+                                            <HelpCircle />
+                                            <span style={{ marginLeft: '8px' }}>Teaching Tip</span>
+                                        </h3>
+                                        <p>
+                                            Challenge students: "If equilibrium means the reactions have stopped, 
+                                            why does the solution color change?" Then show them this simulation 
+                                            to reveal that both reactions continue, but the rates shift.
+                                        </p>
+                                    </section>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<CobaltEquilibrium />);
+    </script>
+</body>
+</html>
