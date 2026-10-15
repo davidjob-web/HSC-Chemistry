@@ -18,7 +18,8 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             background-color: #111827;
             color: white;
-            overflow: hidden;
+            overflow-x: hidden;
+            overflow-y: auto;
         }
         
         button {
@@ -62,9 +63,18 @@
         }
         
         #root {
-            width: 100vw;
-            height: 100vh;
+            width: 100%;
+            min-height: 100vh;
         }
+
+        /* Side panels sit beside the simulation on wide screens, below it on narrow ones */
+        .main-area { display: flex; flex: 1; flex-wrap: wrap; }
+        .sim-area { flex: 1 1 500px; min-width: 0; }
+        .side-panel { flex: 0 1 340px; }
+        @media (max-width: 900px) {
+            .side-panel { flex: 1 1 100%; border-left: none !important; border-top: 1px solid #374151; }
+        }
+        button svg { pointer-events: none; }
         
         .icon {
             width: 20px;
@@ -143,6 +153,15 @@
             const [showEquation, setShowEquation] = useState(false);
             const [showMechanism, setShowMechanism] = useState(false);
             
+            // Live copies of the controls so the animation loop always sees current values
+            const isRunningRef = useRef(true);
+            const speedRef = useRef(50);
+            const temperatureRef = useRef(50);
+            const frameCountRef = useRef(0);
+            useEffect(() => { isRunningRef.current = isRunning; }, [isRunning]);
+            useEffect(() => { speedRef.current = speed; }, [speed]);
+            useEffect(() => { temperatureRef.current = temperature; }, [temperature]);
+
             const [stats, setStats] = useState({
                 pinkComplexes: 0,
                 blueComplexes: 0,
@@ -332,12 +351,15 @@
                 ctx.fillStyle = '#1a1a2e';
                 ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
                 
-                const speedFactor = speed / 50;
-                const tempFactor = temperature / 50;
-                
+                const running = isRunningRef.current;
+                const speedFactor = speedRef.current / 50;
+                // Temperature affects both particle motion and reaction probability
+                const tempFactor = Math.max(temperatureRef.current, 5) / 50;
+                const moveFactor = running ? speedFactor * (0.5 + 0.5 * tempFactor) : 0;
+
                 particles.forEach(p => {
-                    p.x += p.vx * speedFactor;
-                    p.y += p.vy * speedFactor;
+                    p.x += p.vx * moveFactor;
+                    p.y += p.vy * moveFactor;
                     
                     if (p.x < p.radius || p.x > CANVAS_WIDTH - p.radius) {
                         p.vx *= -1;
@@ -349,7 +371,7 @@
                     }
                 });
                 
-                if (isRunning) {
+                if (running) {
                     checkReactions(particles, tempFactor, speedFactor);
                 }
                 
@@ -392,13 +414,16 @@
                     }
                 });
                 
-                setStats({
-                    pinkComplexes: pinkCount,
-                    blueComplexes: blueCount,
-                    chlorideIons: chlorideCount,
-                    waterMolecules: waterCount,
-                    overallColor: calculateOverallColor(pinkCount, blueCount)
-                });
+                frameCountRef.current++;
+                if (frameCountRef.current % 6 === 0) {
+                    setStats({
+                        pinkComplexes: pinkCount,
+                        blueComplexes: blueCount,
+                        chlorideIons: chlorideCount,
+                        waterMolecules: waterCount,
+                        overallColor: calculateOverallColor(pinkCount, blueCount)
+                    });
+                }
                 
                 animationRef.current = requestAnimationFrame(animate);
             };
@@ -441,16 +466,13 @@
                 }
             }, [chlorideConcentration]);
 
+            // Reset just rebuilds the particles; the running animation loop picks them up
             const handleReset = () => {
-                if (animationRef.current) {
-                    cancelAnimationFrame(animationRef.current);
-                }
                 initializeParticles();
-                animate();
             };
 
             return (
-                <div style={{ width: '100vw', height: '100vh', backgroundColor: '#111827', color: 'white', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ width: '100%', minHeight: '100vh', backgroundColor: '#111827', color: 'white', display: 'flex', flexDirection: 'column' }}>
                     {/* Header */}
                     <div style={{ backgroundColor: '#1f2937', padding: '16px', borderBottom: '1px solid #374151' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -479,24 +501,25 @@
                     </div>
 
                     {/* Main content */}
-                    <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+                    <div className="main-area">
                         {/* Simulation area */}
-                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
-                            <div style={{ position: 'relative' }}>
+                        <div className="sim-area" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '16px' }}>
+                            <div style={{ position: 'relative', width: '100%', maxWidth: CANVAS_WIDTH + 'px' }}>
                                 <canvas
                                     ref={canvasRef}
                                     width={CANVAS_WIDTH}
                                     height={CANVAS_HEIGHT}
-                                    style={{ border: '2px solid #374151', borderRadius: '8px' }}
+                                    style={{ display: 'block', width: '100%', height: 'auto', border: '2px solid #374151', borderRadius: '8px' }}
                                 />
                                 
                                 {/* Solution color indicator */}
-                                <div style={{ position: 'absolute', top: '16px', right: '16px', backgroundColor: 'rgba(31, 41, 55, 0.9)', padding: '12px', borderRadius: '8px' }}>
-                                    <div style={{ fontSize: '14px', marginBottom: '8px' }}>Solution Color</div>
+                                <div style={{ position: 'absolute', top: '10px', right: '10px', backgroundColor: 'rgba(31, 41, 55, 0.9)', padding: '8px', borderRadius: '8px', textAlign: 'center' }}>
+                                    <div style={{ fontSize: '12px', marginBottom: '6px' }}>Solution colour</div>
                                     <div 
                                         style={{ 
-                                            width: '80px', 
-                                            height: '80px', 
+                                            width: 'clamp(40px, 9vw, 80px)', 
+                                            height: 'clamp(40px, 9vw, 80px)', 
+                                            margin: '0 auto', 
                                             borderRadius: '4px', 
                                             border: '2px solid white',
                                             backgroundColor: stats.overallColor 
@@ -506,7 +529,7 @@
                             </div>
 
                             {/* Controls */}
-                            <div style={{ marginTop: '16px', width: '100%', maxWidth: '1000px' }}>
+                            <div style={{ marginTop: '16px', width: '100%', maxWidth: CANVAS_WIDTH + 'px' }}>
                                 <div style={{ backgroundColor: '#1f2937', padding: '16px', borderRadius: '8px' }}>
                                     {/* Playback controls */}
                                     <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginBottom: '16px' }}>
@@ -550,7 +573,7 @@
 
                         {/* Settings Panel */}
                         {showSettings && (
-                            <div style={{ width: '320px', backgroundColor: '#1f2937', borderLeft: '1px solid #374151', padding: '16px', overflowY: 'auto' }}>
+                            <div className="side-panel" style={{ backgroundColor: '#1f2937', borderLeft: '1px solid #374151', padding: '16px', overflowY: 'auto' }}>
                                 <h2 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '16px' }}>Settings</h2>
                                 
                                 {/* Temperature */}
@@ -699,7 +722,7 @@
 
                         {/* Info Panel */}
                         {showInfo && (
-                            <div style={{ width: '384px', backgroundColor: '#1f2937', borderLeft: '1px solid #374151', padding: '16px', overflowY: 'auto' }}>
+                            <div className="side-panel" style={{ backgroundColor: '#1f2937', borderLeft: '1px solid #374151', padding: '16px', overflowY: 'auto' }}>
                                 <h2 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '16px' }}>About This Simulation</h2>
                                 
                                 <div style={{ fontSize: '14px', color: '#d1d5db' }}>
